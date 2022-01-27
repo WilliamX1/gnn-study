@@ -6,6 +6,7 @@
 
 - [目录](#目录)
 - [图的基础知识](#图的基础知识)
+	- [图的类别]($图的类别) 
 - [Graph Embedding](#Graph-Embedding)
 	- [DeepWalk](#DeepWalk)
 	- [LINE](#Line-Large-scale-Information-Network-Embedding)
@@ -15,6 +16,8 @@
 - [Graph Neural Network](#Graph-Neural-Network)
 	- [GCN](#GCN) 
 	- [GraphSAGE](#GraphSAGE)
+	- [GAN](#GAN)
+- [HAN](#Heterogeneous-graph-attention-network-HAN)
 - [参考链接](#参考链接)
 
 ## 图的基础知识
@@ -84,6 +87,15 @@ $$
 $$
 x_v = \frac{1}{\lambda}\sum_{t \in G}a_{v, t}x_t
 $$
+
+### 图的类别
+
+- **异构图 (Heterogeneous Graph Neural Networks)**。即节点和边是有类别之分的，至少有两种及以上种类的边或至少有两种及以上种类的节点，也可以同时存在不同类别的边和节点。
+- **二部图 (Bipartite Graph Neural Networks)**。即二分图，直观理解图分成左右两部分，两部分的节点之间可以相互连接，但同一边的节点之间一定没有连线。
+- **多维图 (Multi-dimensional Graph Neural Networks)**。即两个节点间可能有多种关系的连线，例如人可以 "点击"，"购买"，"评论" 某商品。
+- **符号图 (Signed graph)**。边上带有符号关系的图。例如 "点赞" 和 "点踩"。
+- **超图 (Hypergraphs)**。一条边连接着两个及以上的节点。
+- **动态图 (Dynamic Graphs)**。节点或边会随着时间的变化而变化。
 
 ## Graph Embedding
 
@@ -310,6 +322,90 @@ $$
 $$
 \vec{h^{'}_i} = \sigma(\frac{1}{K} \sum^K_{k = 1}\sum_{j \in N_i} \alpha_{ij}^k \cdot W^k \cdot \vec{h_j})
 $$
+
+## Heterogeneous graph attention network (HAN)
+
+> 基于 **注意力机制** 的 **异构图** 神经网络，利用 **语义级别注意力** 和 **节点级别注意力** 来同时学习 **元路径** 和 **节点邻居** 的重要性，并通过相应地 **聚合** 操作得到最终的节点表示。
+
+### 基础知识
+
+#### 异构图
+
+定义异构图为 $g = (V, E)$ 由节点的集合 $V$ 和节点之间的边 $E$ 组成。异构图与 **节点类型的映射函数** $\phi: V \rightarrow A$ 以及 **连接类型的映射函数** $\psi: E \rightarrow R$ 相关联。$A$ 和 $R$ 是预先定义好的节点的类型和连接的类型，其中 **$|A| + |R| \geq 2$**。
+
+#### Meta-Path
+
+格式是 $A_1 \stackrel{R_1}{\rightarrow} A_2 \stackrel{R_2}{\rightarrow} \cdots \stackrel{R_l}{\rightarrow} A_{l + 1}$，描述了节点 $A_1$ 和 节点 $A_l$ 之间的一个 **组合关系** $R = R_1 \circ R_2 \circ \cdots \circ R_l$。
+
+例如可以通过 电影 - 时间 - 电影 来定义一个 Meta-Path，从而将同一年的电影进行关联，并在这种 Meta-Path 下形成一条两个电影之间的边。
+
+### Node-Level Attention
+
+不同类别的节点 $\phi_i$ 可能有 **不同维度的特征向量**，所以需要先通过 **转换矩阵$M_i$** 将他们映射到 **相同维度**。设转换前的特征向量为 $h_i$，转换后的特征向量为 $h_i^{'}$。
+
+$$
+h_i^{'} = M_{\phi_i} \cdot h_i
+$$
+
+然后使用 **自注意力机制** 学习 **每个节点的权值**，对于给定的 **节点对** $(i, j)$，他们之间通过 meta-path $\phi$ 连接，他们之间的 **节点注意力值** $e_{ij}^{\phi}$ 表示节点 $j$ 对节点 $i$ 的重要性。
+
+$$
+e_{ij}^{\phi} = \text{att}_{\text{node}}(h_i^{'}, h_j^{'}; \phi) = \sigma(a_\phi^T \cdot [h_i^{'} \| h_j^{'}]).
+$$
+
+其中 $\text{att}_{\text{node}}$ 表示 **节点级别** 的 attention，对于同一个 meta-path $\phi$ 下的目标节点，其邻居节点的权值是 **共享的**。$\sigma$ 是激活函数，$\|$ 是拼接操作，$a_\phi$ 是节点级别的 attention 向量。然后通过 softmax 操作得到每个特征向量的 **权值系数**。
+
+$$
+\alpha_{ij}^\phi = \text{softmax}(e_{ij}^\phi) = \frac{\exp(\sigma(a_\phi^T \cdot [h_i^{'} \| h_j^{'}]))}{\sum_{k \in N_i^\phi} \exp(\sigma(a_\phi^T \cdot [h_i^{'} \| h_k^{'}]))}
+$$
+
+最后，节点 $i$ 最终的 embedding 计算方式如下。
+
+$$
+z_i^\phi = \sigma(\sum_{j \in N_i^\phi} \alpha_{ij}^\phi \cdot h_j^{'})
+$$
+
+节点的类别可能会非常多，所以引入 **多头注意力机制**。
+
+$$
+z_i^\phi = ||^K_{k = 1}\sigma(\sum_{j \in N_i^\phi} \alpha_{ij}^\phi \cdot h_j^{'})
+$$
+
+### Semantic-Level Attention
+
+语义级别的 Attention 将不同类型的连接的 embedding 组合起来。假设每个类别的权值为 $\beta$，它的计算方式抽象为。
+
+$$
+(\beta_1, \beta_2, \cdots \beta_P) = \text{att}_\text{sem}(Z_{\phi_1}, Z_{\phi_2}, \cdots, Z_{\phi_P})
+$$
+
+其中 $\text{att}_\text{sem}$ 目的是 **学习每种边类型的重要性**。
+
+$$
+w_\phi = \frac{1}{|V|}\sum_{i \in V}q^T \cdot \tanh(W \cdot z_i^\phi + b)
+$$
+
+其中 $q$ 是语义级别的 Attention 向量，$W$ 是权值矩阵，$b$ 是偏置向量，都是 **需要学习的**，且对于所有的 meta-path 都是 **共享的**。通过 softmax 作用便可以得到每个 meta-path 类别的 Attention 权值。
+
+$$
+\beta_\phi = \frac{\exp(w_{\phi_i})}{\sum^P_{i = 1}\exp(w_{\phi_i})}
+$$
+
+最终，根节点的嵌入表示。
+
+$$
+Z = \sum^P_{i = 1}\beta_{\phi_i} \cdot Z_{\phi_i}
+$$
+
+### Loss Function
+
+HAN 是一个 **半监督模型**。我们根据数据集中有的 **有标签数据**，使用 **误差反相传播算法** 对模型进行训练，使用 **交叉熵损失函数**。
+
+$$
+L = -\sum_{l \in y_L} Y^l \ln(C \cdot Z^l)
+$$
+
+其中，$C$ 是分类器的参数，$y_L$ 是有标签的节点，$Y^l$ 和 $Z^l$ 是有标签数据的标签值和预测值。
 
 ## 参考链接
 
