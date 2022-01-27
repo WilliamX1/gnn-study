@@ -8,12 +8,13 @@
 - [图的基础知识](#图的基础知识)
 - [Graph Embedding](#Graph-Embedding)
 	- [DeepWalk](#DeepWalk)
-	- [LINE](#Line:-Large-scale-Information-Network-Embedding)
+	- [LINE](#Line-Large-scale-Information-Network-Embedding)
 	- [node2vec](#node2vec)
 	- [struc2vec](#struc2vec)
 	- [SDNE](#SDNE)
 - [Graph Neural Network](#Graph-Neural-Network)
 	- [GCN](#GCN) 
+	- [GraphSAGE](#GraphSAGE)
 - [参考链接](#参考链接)
 
 ## 图的基础知识
@@ -239,6 +240,76 @@ $$
 - $H^{(l)}$ 是第 $I$ 层的激活单元矩阵，$H^0 = X$。
 - $W^{(l)}$ 是每一层的参数矩阵。
 
+### GraphSAGE
+
+> 通过学习一个对邻居节点进行聚合表示的函数来产生目标顶点的 embedding 向量。先采样邻居节点的向量信息，然后对这些信息进行聚合操作，最后和自己的信息进行拼接得到单个向量，并且 **训练权重函数** 来生成节点的 embedding。
+
+#### 采样邻居节点
+
+采样数量 **少于** 邻居节点数时，采用 **有放回** 抽样方法。采样数量 **多于** 邻居节点数时，采用 **无放回** 抽样方法。
+
+**minibatch** 仅采样部分邻居节点，不使用全图信息，适用于大规模图训练。具体方式如下图：
+
+![graphsage-minibatch](./README/graphsage-minibatch.png)
+
+#### 聚合拼接
+
+$$
+\begin{align}
+h^k_{N(v)} & \leftarrow \text{AGGREGATE}_k(\{h^{k - 1}_u, \forall u \in N(v) \}) \\
+h^k_v & \leftarrow \sigma(W^k \cdot \text{CONCAT}(h^{k - 1}_v, h^k_{N(v)})) \\
+\end{align}
+$$
+
+**常用聚合函数**
+
+- **MEAN aggregator**：将目标顶点和邻居顶点的 $k - 1$ 层向量 **拼接** 起来，然后对向量的每个维度进行 **求均值** 操作，将得到的结果做一次 **非线性变化** 产生目标顶点的第 $k$ 层表示向量。
+
+$$
+h^k_v \leftarrow \sigma(W \cdot \text{MEAN}(\{h^{k - 1}_v\} \cup \{h^{k - 1}_u, \forall u \in N(v) \}))
+$$
+
+- **Pooling aggregator**：先对目标顶点的邻结点表示向量进行一次非线性变换，之后再进行一次 pooling 操作（maxpooling 或 meanpooling），将得到结果与目标顶点的表示向量拼接，最后再进行一次非线性变换得到目标顶点的第 $k$ 层表示向量。
+
+$$
+\text{AGGREGATE}^{\text{pool}}k = \max(\{\sigma (W_{\text{pool}} h^k_{u_i} + b), \forall u_i \in N(v) \})
+$$
+
+- **LSTM aggregator**：有更强的表达能力，但不是输入对称的，所以使用时需要对顶点的邻句 **乱序**。
+
+#### 参数学习
+
+无监督学习。基于图的损失函数希望 **临近的节点具有相似的向量表示**，同时让 **分离的节点表示尽可能区分**。目标函数如下：
+
+$$
+J_G(z_u) = -\log (\sigma (z_u^T z_v)) - Q \cdot E_{v_n \sim P_n(v)} \log(\sigma (-z_u^T z_{v_n}))
+$$
+
+其中，$v$ 是通过 **固定长度的随机游走** 出现在 $u$ 附近的节点，$p_n$ 是负采样的概率分布，$Q$ 是负样本数量。
+
+### GAT
+
+$$
+\alpha_{ij} = \frac{\exp(\text{LeakyReLU}(\vec{a}^T[W \cdot \vec{h}_i \| W \cdot \vec{h}_j])}{\sum_{k \in \N_i} \exp(\text{LeajyReLU}(\vec{a}^T [W \cdot \vec{h}_i \| W \cdot \vec{h}_k])}))
+$$
+
+$$
+\vec{h^{'}_i} = \sigma(\sum_{j \in N_i} \alpha_{ij} \cdot W \cdot \vec{h_j})
+$$
+
+$W$ 为 **训练的权重**，$\|$ 表示将两个向量 **拼接** 在一起。即我们先求出目标节点和某邻居节点之间的 $\alpha$ 系数，然后对目标节点的所有邻居节点进行 **特征结合**，迭代求出下一轮目标节点的表示向量。
+
+**多头注意力机制** 使用不同参数重复训练多次拼接成一个大矩阵。
+
+$$
+\vec{h^{'}_i} = \|^K_{k = 1} \sigma(\sum_{j \in N_i} \alpha_{ij}^k \cdot W^k \cdot \vec{h_j})
+$$
+
+在最后的预测层则直接在向量的每个位置 **取平均值** 得到节点的最终特征。
+
+$$
+\vec{h^{'}_i} = \sigma(\frac{1}{K} \sum^K_{k = 1}\sum_{j \in N_i} \alpha_{ij}^k \cdot W^k \cdot \vec{h_j})
+$$
 
 ## 参考链接
 
