@@ -18,6 +18,7 @@
 	- [GraphSAGE](#GraphSAGE)
 	- [GAN](#GAN)
 - [HAN](#Heterogeneous-graph-attention-network-HAN)
+- [GTN](#Graph-Transformer-Networks-GTN)
 - [参考链接](#参考链接)
 
 ## 图的基础知识
@@ -407,9 +408,51 @@ $$
 
 其中，$C$ 是分类器的参数，$y_L$ 是有标签的节点，$Y^l$ 和 $Z^l$ 是有标签数据的标签值和预测值。
 
+## Graph Transformer Networks (GTN)
+
+> 通过自动学习异构图并生成不同长度的 **meta-path**，再结合传统的 **GCN** 算法以端到端的方式来学习图上有效的节点表示。
+
+### Meta-Path 生成
+
+$\tau^v$ 和 $\tau^e$ 分别代表 **节点类型集合** 和 **边类型集合**。假设异构图 $G = (V, E)$，则有 **节点类型映射函数** $f_v: V \rightarrow \tau^v$ 和 **边类型映射函数** $f_e: E \rightarrow \tau^e$。$N = |V|$ 是 **节点数量**。我们也可以用一堆 **邻接矩阵** $\{A_k\}^K_{k = 1} \text{where} \ K = |\tau^e| $ 来表示这张异构图，也可以写作 $A \in R^{N \times N \times K}$。我们还有一个 **特征矩阵** $X \in R^{N \times D}$ 来表示每个节点的原始特征。
+
+![GTN-Meta-Path-generation](./README/GTN-Meta-Path-generation.png)
+
+首先使用不同卷积核对 **邻接矩阵** $A$ 做卷积。其中 $\phi$ 是卷积层，而 $W_\phi$ 是相应的参数。
+
+$$
+Q = \phi(A; \text{softmax}(W_\phi))
+$$
+
+然后，通过将邻接矩阵相乘来计算某种 meta-path 的矩阵，并使用度矩阵对其正则化以保证稳定性。
+
+$$
+A^{l} = D^{-1}Q_1Q_2
+$$
+
+任意长度 $l$ 的邻接矩阵可以这样计算。$A_P$ 可以看做是 **所有长度为 $l$ 的元路径邻接矩阵的加权和**。
+
+$$
+A_P = (\sum_{t_1 \in \tau^e} \alpha^{(1)}_{t_1}A_{t_1})(\sum_{t_2 \in \tau^e}\alpha^{(2)}_{t_2}A_{t_2}) \cdots (\sum_{t_l \in \tau^e}\alpha_{t_l}^{(l)}A_{t_l})
+$$
+
+这样很容易将 **短的 meta-path** 忽略，因此将 **单位矩阵** 进来 $A_0 = I$。
+
+### 多通道
+
+![GTN-Multi-Channel](./README/GTN-Multi-Channel.png)
+
+GT 层产生一组 meta-path后，通过多个不同的图结构学习不同节点，在 $l$ 个 GT 层堆积之后，将 **GCN** 应用于元路径张量 $A^l \in R^{N \times N \times C}$ 的每个通道，并将多个节点表示 **拼接** 起来成 $Z$。并使用 **交叉熵损失函数** 来训练。
+
+$$
+Z = \|^C_{i = 1} \sigma(\hat{D}_i^{-1} \hat{A}_i^{(l)} X W)
+$$
+
 ## 参考链接
 
 [零基础多图详解图神经网络（GNN/GCN）](https://www.youtube.com/watch?v=sejA2PtCITw)
 
 [【图神经网络】GNN从入门到精通](https://www.bilibili.com/video/BV1K5411H7EQ?p=2)
+
+[Graph Transformer Networks](https://arxiv.org/pdf/1911.06455.pdf)
 
