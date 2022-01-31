@@ -19,6 +19,7 @@
 	- [GAN](#GAN)
 - [HAN](#Heterogeneous-graph-attention-network-HAN)
 - [GTN](#Graph-Transformer-Networks-GTN)
+- [metapath2vec](#metapath2vec)
 - [参考链接](#参考链接)
 
 ## 图的基础知识
@@ -412,6 +413,8 @@ $$
 
 > 通过自动学习异构图并生成不同长度的 **meta-path**，再结合传统的 **GCN** 算法以端到端的方式来学习图上有效的节点表示。
 
+[Graph Transformer Networks](https://arxiv.org/pdf/1911.06455.pdf)
+
 ### Meta-Path 生成
 
 $\tau^v$ 和 $\tau^e$ 分别代表 **节点类型集合** 和 **边类型集合**。假设异构图 $G = (V, E)$，则有 **节点类型映射函数** $f_v: V \rightarrow \tau^v$ 和 **边类型映射函数** $f_e: E \rightarrow \tau^e$。$N = |V|$ 是 **节点数量**。我们也可以用一堆 **邻接矩阵** $\{A_k\}^K_{k = 1} \text{where} \ K = |\tau^e| $ 来表示这张异构图，也可以写作 $A \in R^{N \times N \times K}$。我们还有一个 **特征矩阵** $X \in R^{N \times D}$ 来表示每个节点的原始特征。
@@ -448,11 +451,99 @@ $$
 Z = \|^C_{i = 1} \sigma(\hat{D}_i^{-1} \hat{A}_i^{(l)} X W)
 $$
 
+## metapath2vec
+
+> 专注于 **异构网络**，使用 **基于 meta-path 的随机游走策略** 来构建每个顶点的异构邻域，再使用 **Skip-Gram** 模型来完成顶点的嵌入。
+
+[metapath2vec: Scalable Representation Learning for
+Heterogeneous Networks](https://dl.acm.org/doi/pdf/10.1145/3097983.3098036)
+
+### metapath2vec 框架
+
+对于一个 **同构网络** $G = (V, E)$，目标是从每个顶点的局部领域 **最大化网络似然**。
+
+$$
+\arg \underset{\theta}{\max} \prod_{v \in V} \prod_{c \in N(v)} p(c | v; \theta)
+$$
+
+其中，$N(v)$ 表示顶点 $v$ 的邻域，$p(c | v; \theta)$ 表示给定顶点 $v$ 后顶点 $c$ 的条件概率。
+
+而 metapath2vec 主要分为 **Meta-Path-Based Random Walks** 和 **Heterogeneous Skip-Gram** 两个部分。
+
+#### Meta-Path-Based Random Walks
+
+> 一种异构网络上的随机游走方式。
+
+一个异构网络 $G = (V, E, T)$ 和一个 meta-path 的 scheme $P$ 定义如下。
+
+$$
+V_1 \stackrel{R_1}{\rightarrow} V_2 \stackrel{R_2}{\rightarrow} \dots V_t \stackrel{t}{\rightarrow} V_{t + 1} \dots V_{l - 1} \stackrel{R_{l - 1}}{\rightarrow} V_l
+$$
+
+在第 $i$ 步的转义概率定义如下。
+
+$$
+p(v^{i + 1} | v_t^i, P) = 
+\begin{cases}
+\frac{1}{| N_{t + 1}(v_t^i) |} & (v^{i + 1}, v^i) \in E, \phi(v^{i + 1}) = t + 1 \\
+0 & (v^{i + 1}, v^i) \in E, \phi(v^{i + 1}) \neq t + 1 \\
+0 & (v^{i + 1}, v^i) \in E \\
+\end{cases}
+$$
+
+其中。$v_t^i \in V_t$，$N_{t + 1}(v_t^i)$ 表示顶点 $v_t^i$ 的 $V_{t + 1}$ 类型的邻域顶点集合。直观理解就是在预定义的 meta-path scheme $P$ 条件下进行 **有偏游走**。
+
+且 meta-path 常常以对称方式使用，即顶点 $V_1$ 的类型和 $V_l$ 的类型相同。
+
+$$
+p(v^{i + 1} | v_t^i) = p(v^{i + 1} | v_l^i), \text{if} \ t = 1
+$$
+
+这样保证不同烈性顶点之间的语义关系可以适当融入 Skip-Gram 模型中去。
+
+#### Heterogeneous Skip-Gram
+
+> 使用 **Skip-Gram** 模型通过在顶点 $v$  的邻域 $N_t(v), t \in T_v$ 上 **最大化条件概率** 来学习异构网络 $G = (V, E, T)$ 上的顶点表征。
+
+$$
+\arg \underset{\theta}{\max} \sum_{v \in V}\sum_{t \in T_v}\sum{c_t \in N_t(v)} \log p(c_t | v; \theta)
+$$
+
+$p(c_t | v; \theta)$ 通常定义为 $softmax$ 函数。
+
+$$
+p(c_t | v; \theta) = \frac{e^{X_{c_t} \cdot X_v}}{\sum_{u \in V} e^{X_u \cdot X_v}}
+$$
+
+其中 $X_v$ 是矩阵 $X$ 的第 $v$ 行矩阵，表示顶点 $v$ 的 **嵌入向量**。为了 **提高参数更新效率**，采用 **Negative Sampling** 进行 **参数迭代更新**，给定一个 Negative Sampling 的大小 M，参数更新过程如下。
+
+$$
+\log \sigma(X_{t_t} \cdot X_v) + \sum^M_{m = 1}E_{u^m \sim P(u)}[\log \sigma(-X_{u^m} \cdot X_v)]
+$$
+
+其中 $\sigma = \frac{1}{1 + e^{-x}}$，$P(u)$ 是一个 **Negative Node $u^m$** 的**预定义分布**。
+
+metapath2vec 通过 **不考虑** 顶点的类型进行节点抽取来确定当前顶点概率。
+
+### metapath2vec++
+
+> 在 softmax 环节考虑顶点类型，从而在 Negative Sampling 环节采样时考虑顶点类型。
+
+softmax 函数 **根据不同类型的顶点** 的上下文 $c_t$ 进行归一化。
+
+$$
+p(c_t | v; \theta) = \frac{e^{X_{c_t} \cdot X_v}}{\sum_{u_t \in V_t} e^{X_{u_t} \cdot X_v}}
+$$
+
+最终得到的目标函数是。
+
+$$
+O(X)= \log \sigma(X_{c_t} \cdot X_v) + \sum^M_{m = 1}E_{u_t^m \sim P_t(u_t)}[\log\sigma(-X_{u_t^m} \cdot X_v)]
+$$
+
 ## 参考链接
 
 [零基础多图详解图神经网络（GNN/GCN）](https://www.youtube.com/watch?v=sejA2PtCITw)
 
 [【图神经网络】GNN从入门到精通](https://www.bilibili.com/video/BV1K5411H7EQ?p=2)
-
-[Graph Transformer Networks](https://arxiv.org/pdf/1911.06455.pdf)
 
