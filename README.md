@@ -10,16 +10,17 @@
 - [Graph Embedding](#Graph-Embedding)
 	- [DeepWalk](#DeepWalk)
 	- [LINE](#Line-Large-scale-Information-Network-Embedding)
-	- [node2vec](#node2vec)
-	- [struc2vec](#struc2vec)
+	- [Node2vec](#Node2vec)
+	- [Struc2vec](#Struc2vec)
 	- [SDNE](#SDNE)
-- [Graph Neural Network](#Graph-Neural-Network)
-	- [GCN](#GCN) 
+- [Graph Neural Network (GNN)](#Graph-Neural-Network-GNN)
+	- [Graph Convolutional Network (GCN)](#Graph-Convolutional-Network-GCN)
 	- [GraphSAGE](#GraphSAGE)
-	- [GAN](#GAN)
-- [HAN](#Heterogeneous-graph-attention-network-HAN)
-- [GTN](#Graph-Transformer-Networks-GTN)
-- [metapath2vec](#metapath2vec)
+	- [Graph Attention Network (GAT)](#Graph-Attention-Network-GAT)
+- [Heterogeneous Graph Attention Network (HAN)](#Heterogeneous-graph-attention-network-HAN)
+- [Graph Transformer Networks (GTN)](#Graph-Transformer-Networks-GTN)
+- [Metapath2Vec](#Metapath2Vec)
+- [General Attributed Multiplex HeTerogeneous Network Embedding (GATNE)](#General-Attributed-Multiplex-HeTerogeneous-Network-Embedding-GATNE)
 - [参考链接](#参考链接)
 
 ## 图的基础知识
@@ -237,9 +238,9 @@ $$
 
 > 采用多个非线性层的方式捕获一阶二阶的相似性。
 
-## Graph Neural Network
+## Graph Neural Network (GNN)
 
-### GCN
+### Graph Convolutional Network (GCN)
 
 > 多层的图卷积神经网络，每一个卷积层仅处理一阶邻域信息，通过叠加若干卷积层可以实现多阶邻域的信息传递。
 
@@ -301,7 +302,7 @@ $$
 
 其中，$v$ 是通过 **固定长度的随机游走** 出现在 $u$ 附近的节点，$p_n$ 是负采样的概率分布，$Q$ 是负样本数量。
 
-### GAT
+### Graph Attention Network (GAT)
 
 $$
 \alpha_{ij} = \frac{\exp(\text{LeakyReLU}(\vec{a}^T[W \cdot \vec{h}_i \| W \cdot \vec{h}_j])}{\sum_{k \in \N_i} \exp(\text{LeajyReLU}(\vec{a}^T [W \cdot \vec{h}_i \| W \cdot \vec{h}_k])}))
@@ -451,7 +452,7 @@ $$
 Z = \|^C_{i = 1} \sigma(\hat{D}_i^{-1} \hat{A}_i^{(l)} X W)
 $$
 
-## metapath2vec
+## Metapath2Vec
 
 > 专注于 **异构网络**，使用 **基于 meta-path 的随机游走策略** 来构建每个顶点的异构邻域，再使用 **Skip-Gram** 模型来完成顶点的嵌入。
 
@@ -540,6 +541,113 @@ $$
 $$
 O(X)= \log \sigma(X_{c_t} \cdot X_v) + \sum^M_{m = 1}E_{u_t^m \sim P_t(u_t)}[\log\sigma(-X_{u_t^m} \cdot X_v)]
 $$
+
+## General Attributed Multiplex HeTerogeneous Network Embedding (GATNE)
+
+> 解决了 AMHEN 图网络，其包含**不同类型的节点**，相邻节点之间有**不同类型的边**，且每个节点有多个属性值。
+
+**AMHEN** 是 _Attributed Multiplex HEterogeneous Network_ 的缩写，对于这种图网络的研究有几大难点：
+
+- **多类型边**：每个节点对之间都有可能有多条不同类型的边，这些信息需要被充分考虑。
+- **观察不全面**：实际数据往往是观察不全面的，常规的神经网络嵌入算法无法解决 **长尾** 和 **冷启动** 的问题。
+- **可拓展性**：实际数据往往巨大无比，这就非常考验算法对大的神经网络的适应性和拓展性了。
+
+基于此，我们提出了 **GATNE** 方法，它**正式定义了多属性多类型的异构图嵌入问题**，且支持 **转换型** 和 **归纳型** 两种嵌入方式，而且其中的算法非常 **高效**（时间复杂度较低，有利于解决超大规模图网络）。
+
+### 基本定义
+
+- **图网络** $G = (V, E)$，$V$ 是 $n$ 个节点的集合，$E$ 是边的集合。每条边 $e_{ij} = (v_i, v_j)$ 都有一个权重 $w_{ij} \geq 0$，表示连接的两个节点之间相关性强弱。实际问题中，如果 $G$ 是有向图，则 $e_{ij} \neq e_{ji}$ 并且 $w_{ij} \neq w_{ji}$。如果 $G$ 是无向图，则 $e_{ij} \equiv e_{ji}$ 且 $w_{ij} \equiv w_{ji}$。具体符号定义如下：
+
+![GATNE-def](./README/GATNE-def.png)
+
+- **异构图** $G = (V, E)$ 有一个 **节点类型映射函数** $\phi: V \rightarrow O$ 和一个 **边类型映射函数** $\psi: E \rightarrow R$。$O$ 和 $R$ 分别代表所有结点类型的集合、所有边类型的集合。异构图必须满足 $|O| + |R| \gt 2$。
+- **属性图** $G = (V, E, A)$，每一个节点 $v_i \in V$ 都有一个关联的属性数组，$A = {x_i | v_i \in V}$ 是所有结点的节点属性的集合，$x_i$ 就是节点 $v_i$ 对应的属性数组。
+- **属性化多路异构图** $G = (V, E, A), E = \bigcup_{r \in R} E_r$，其中 $E_r$ 包含了所有类型是 $r \in R$ 的边。我们可以根据边类型将这个图划分成多个子图 $G_r = (V, E_r, A)$。
+
+### Transductive Model: GATNE-T
+
+对于某个特定节点 $v_i$ 和每种类型的边 $r$，将 _embedding_ 分成 _base embedding_ 和 _edge embedding_。其中，_base embedding_ 会被不同类型的边 **共享**，而 _k-th level edge embedding_ $u_{i, r}^{(k)} \in R^s$ 则是从 **邻居节点** 进行 **聚合** 而来：
+
+$$
+u_{i, r}^{(k)} = \text{aggregator}({u_{j, r}^{(k - 1)}, \forall v_j \in N_{i, r}})
+$$
+
+其中 $N_{i, r}$ 是节点 $v_i$ 通过 $r$ 类型的边连接的邻居节点的集合。初始化的 $u_{i, r}^{(0)}$ 是随机生成的，而 $\text{aggregator}$ 函数可以是 **mean aggregator** 或者 **max-pooling aggregator**：
+
+$$
+u_{i, r}^{(k)} = \sigma(\hat{W}^{(k)} \cdot \text{mean}(\{u_{j, r}^{(k - 1)}, \forall v_j \in N_{i, r} \})) \quad \text{mean aggregator} \\
+u_{i, r}^{(k)} = \max(\{\sigma(\hat{W}_{pool}^{(k)} u_{j, r}^{(k - 1)} + \hat{b}_{pool}^{(k)}), \forall v_j \in N_{i, r} \}) \quad \text{max-pooling aggregator} \\
+$$
+
+其中 $\sigma$ 是 **激活函数**，我们将所有 level 的 _edge embedding_ 拼接起来，得到 $U_i$：
+
+$$
+U_i = (u_{i, 1}, u_{i, 2}, \dots, u_{i, m}).
+$$
+
+利用 **自注意力机制** 计算 $U_i$ 中每个元素对应的系数 $a_{i, r} \in R^m$：
+
+$$
+a_{i, r} = \text{softmax}(w_r^T \tanh(W_rU_i)^T)
+$$
+
+$w_r$ 和 $W_r$ 是可训练的系数，大小分别是 $d_a$ 和 $d_a \times s$，$s$ 是 $U_i$ 的维度。最终，我们得到特定节点针对某种边类型的总的 _embedding_是：
+
+$$
+v_{i, r} = b_i + \alpha_r M_r^T U_i a_{i, r}
+$$
+
+其中，$b_i$ 是节点 $v_i$ 的 _base embedding_，$alpha_r$ 是表示 _edge embedding_ 对于总的 _embedding_ 的重要性的 **超参数**，$M_r \in R^{s \times d}$ 是 **可训练** 的 **转移矩阵**。
+
+![GATNE-T-GATNE-I-Diff](./README/GATNE-T-GATNE-I-Diff.png)
+
+### Inductive Model: GATNE-I
+
+由于 GATNE-T 只是将现有数据进行转换，因此无法处理新的数据，而 GATNE-I 便是从现有数据中学习某种规律，并将其转换成函数表示，因此对于新的数据也可以很好地处理。
+
+我们定义 _base embedding_ $b_i = h_z(x_i)$，其中 $h_z$ 是 **转换函数**，$z = \phi(i)$ 是节点 $v_i$ 的节点类型，初始化的 $u_{i, r}^{(0)} = g_{z, r}(x_i)$ 也是一个转换函数。
+
+最终，我们还加入了额外的属性贡献，得到：
+
+$$
+v_{i, r} = h_z(x_i) + \alpha_r M_r^T U_i a_{i, r} + \beta_r D_z^T x_i
+$$
+
+其中 $\beta_r$ 是一个参数，$D_z$ 是一个对应于节点特征 $z$ 的转换矩阵。
+
+GATNE-T 和 GATNE-I **本质区别** 在于：
+
+- 在 GATNE-T 中，_base embedding_ $b_i$ 和 _initial edge embedding_ $u_{i, r}^{(0)}$ 是直接根据网络结构对每个节点进行训练得到的，因此无法处理新的节点。
+- 在 GATNE-I 中，我们则训练一个 **转换函数** $h_z$ 和 $g_{z, r}$，这两个函数可以将原始特征 $x_i$ 映射成 $b_i$ 和 $u_{i, r}^{(0)}$，因此可以处理新的节点。
+
+### 模型优化
+
+使用 **meta-path-based 随机游走** 来生成节点序列，使用 _skip-gram_ 算法对生成的节点序列学习得到 _embeddings_。转移概率是：
+
+$$
+p(v_j | v_i, T) =
+\begin{cases}
+\frac{1}{|N_{i, r} \cap V_{t + 1}|} & (v_i, v_j) \in E_r, v_j \in V_{t + 1} \\
+0 & (v_i, v_j) \in E_r, v_j \notin V_{t + 1} \\
+0 & (v_i, v_j) \notin E_r \\
+\end{cases}
+$$
+
+所以，给定节点 $v_i$ 和它的语境 $C$，我们需要最小化它的负采样对数概率：
+
+$$
+-\log P_\theta (\{v_j | v_j \in C\} | v_i) = \sum_{v_j \in C} - \log P_\theta(v_j | v_i) \\
+$$
+
+其中，$\theta$ 是所有的参数，我们采用异构的 _softmax_ 函数进行标准化，最终得到：
+
+$$
+E = -\log\sigma(c_j^T \cdot v_{i, r}) - \sum^L_{l = 1} E_{v_k \sim P_t(v)} [\log \sigma (-c_k^T \cdot v_{i, r})]
+$$
+
+其中，$\sigma(x) = 1 / (1 + \exp(-x))$ 是 _sigmoid_ 函数，$L$ 是负采样样本数量，而 $v_k$ 是从节点 $v_j$ 的对应节点集 $V_t$ 上定义的噪声分布 $P_t (v)$ 中随机抽取的。
+
+我们的随机游走算法 **时间复杂度** 是 $O(nmdL)$，$n$ 是节点数量，$m$ 是边类型数，$d$ 是总的 _embedding_ 的长度大小，$L$ 是负采样样本数量。**空间复杂度** 是 $O(n(d + m \times s))$，$s$ 是 _edge embedding_ 的长度大小。
 
 ## 参考链接
 
