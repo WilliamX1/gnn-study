@@ -649,6 +649,10 @@ $$
 
 我们的随机游走算法 **时间复杂度** 是 $O(nmdL)$，$n$ 是节点数量，$m$ 是边类型数，$d$ 是总的 _embedding_ 的长度大小，$L$ 是负采样样本数量。**空间复杂度** 是 $O(n(d + m \times s))$，$s$ 是 _edge embedding_ 的长度大小。
 
+## Bipartite Network Embedding (BiNE)
+
+http://staff.ustc.edu.cn/~hexn/papers/sigir18-bipartiteNE.pdf
+
 ## 参考链接
 
 [零基础多图详解图神经网络（GNN/GCN）](https://www.youtube.com/watch?v=sejA2PtCITw)
