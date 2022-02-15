@@ -651,7 +651,127 @@ $$
 
 ## Bipartite Network Embedding (BiNE)
 
-http://staff.ustc.edu.cn/~hexn/papers/sigir18-bipartiteNE.pdf
+> 进行有 **目的性** 的随机游走生成节点序列，然后设计一种同时考虑显式关系和隐式关系的新型优化框架，来表示学习节点的表示。
+
+- **显示关系** 是指能从数据集中直接获得的关系信息，如图中可直接观测到的边信息。
+- **隐式关系** 是指数据中隐含的关系信息，例如两个节点没有直接边连接，但通过某个节点间接连接在一起，那么可以认为这两个节点之间具有隐式关系。
+
+### 问题定义
+
+给定异构图 $G = (U, V, E)$，$U$ 和 $V$ 分别表示两种类型节点的集合，而 $E$ 表示边集合，再给出边的权重矩阵 $W$。需要求出一个映射函数 $f: U \cup V \rightarrow R^d$，从而将图中每个节点映射到一个 $d$ 维的嵌入数组。
+
+### BiNE 模型
+
+一个好的 embedding 需要能够重建原来的图网络，因此我们从 **显式关系和隐式关系** 两个方面来重构原始的二分图学习，并将学习到的 embedding 结合起来学习到最终的节点表示。
+
+#### 显式关系
+
+对显式关系的建模，考虑两个已有连接边的节点，其 **连接概率** 定义为
+
+$$
+P(i, j) = \frac{w_{ij}}{\sum_{e_{ij} \in E} w_{ij}}
+$$
+
+显然，两节点之间边的权重值越大，概率值越大。参考 word2vec 向量内积思想，将两个节点的嵌入在空间内的相似度表示为
+
+$$
+\hat{P}(i, j) = \frac{1}{1 + \exp(-\vec{u_i}^T\vec{v_j})}
+$$
+
+然后使用 KL 散度来衡量俩分布的差异并以最小化为目标，即显式关系的目标函数是
+
+$$
+\text{minimize} \quad O_1 = \text{KL}(P\|\hat{P}) = \sum_{e_{ij} \in E} P(i, j) \log(\frac{P(i, j)}{\hat{P}(i, j)}) \\
+
+\propto - \sum_{e_{ij} \in E} w_{ij} \log\hat{P}(i, j)
+$$
+
+直观理解是，对于两个相连紧密的节点，学习到的两个节点在低位向量空间中的表示也是靠近的，即保持了 **局部临近性**。
+
+#### 隐式关系
+
+隐式关系相对于同类型节点而言，面对大规模的二分图，需要用到 DeepWalk 中的随机游走，生成两个包含不同类型节点的语料库。
+
+1. 构建顶点序列的语料库
+
+将二分图 **拆分成两个同质网络**，定义两个同类型节点的二阶相似度为
+
+$$
+w_{ij}^U = \sum_{k \in V} w_{ik}w_{jk} \\
+w_{ij}^V = \sum_{k \in U} w_{ki}w_{kj} \\
+$$
+
+这样得到两个同质网络的权重矩阵，大小分别为 $| U | \times |U|$，$|V| \times |V|$。
+
+然后我们在这两个同质网络的权重矩阵运行 **截断随机游走**，引入 **偏置** 和 **自适应** 的随机游走产生器，具体参照规则如下
+
+- 对于每个节点，其 **中心性** 越强，从它开始的随机游走序列越多。
+- 选定一个 **概率值**，使得随机游走会在某一步随机地停止，得到长度不同的节点序列。
+
+2. 建模隐式关系
+
+在上述生成的两个语料库中分别使用 Skip-Gram 模型来学习节点的表示，目标函数如下
+
+$$
+\text{maximize} \quad O_2 = \prod_{u_i \in S \and S \in D^U} \prod_{u_c \in C_S(u_i)} P(u_c | u_i) \\
+P(u_c | u_i) = \frac{\exp(\vec{u_i}^T\vec{\theta_c})}{\sum^{|U|}_{k = 1} \exp(\vec{u_i}^T\vec{\theta_k})}
+$$
+
+$S$ 为语料库中的节点序列，$C_S(u_i)$ 是在该序列中节点 $u_i$ 的上下文节点集合。
+
+由于计算 $P$ 的时候采用了 $\text{softmax}$ 函数，复杂度太高，因此采用 **负采样** 方法来逼近这个函数。
+
+3. 负采样
+
+采用 **局部敏感哈希** 算法，给出 $N_S^{ns}$ 表示在序列 $S \in D^U$ 中节点 $u_i$ 的 $ns$ 负采样样本，则我们近似 $p(u_c | u_i)$ 为
+
+$$
+p(u_c, N_S^{ns}(u_i) | u_i) = \prod_{z \in \{u_c\} \cup N_S^{ns}(u_i)} P(z | u_i) 
+$$
+
+其中 $P(z | u_j)$ 是
+
+$$
+P(z | u_i)
+\begin{cases}
+\sigma(\vec{u_i}^T\vec{\theta_z}), & \text{if } z \text{ is a context of } u_i \\
+1 - \sigma(\vec{u_i}^T\vec{\theta_z}), & z \in N_S^{ns}(u_i) \\
+\end{cases}
+$$
+
+其中 $\sigma = \frac{1}{1 + e^{-x}}$。
+
+#### 联合优化
+
+分别通过显式关系和隐式关系得到节点表示，然后我们需要将这两者结合起来形成最终的节点表示，最终的目标函数公式是
+
+$$
+\text{maximize} \quad L = \alpha\log O_2 + \beta\log O_3 - \gamma O_1
+$$
+
+使用 SGA 来优化这个函数，因为优化这个函数的不同部分需要不同的训练实例，所以 **分布优化**。
+
+首先优化 **显式关系**，更新节点公式为
+
+$$
+\vec{u_i} = \vec{u_i} + \lambda\{\gamma w_{ij}[1 - \sigma(\vec{u_i}^T \vec{v_j})] \cdot \vec{v_j}\}, \\
+\vec{v_j} = \vec{v_j} + \lambda\{\gamma w_{ij}[1 - \sigma(\vec{u_i}^T \vec{v_j})] \cdot \vec{u_i}\}, \\
+$$
+
+然后优化 **隐式关系**，公式如下
+
+$$
+\vec{u_i} = \vec{u_i} + \lambda\{\sum_{z \in \{u_c\} \cup N_S^{ns}(u_i)} \alpha[I(z, u_i) - \sigma(\vec{u_i}^T \vec{\theta_z})] \cdot \vec{\theta_z} \} \\
+\vec{v_j} = \vec{v_j} + \lambda\{\sum_{z \in \{v_c\} \cup N_S^{ns}(v_j)} \beta[I(z, v_j) - \sigma(\vec{v_j}^T\vec{\theta_z^{'}})] \cdot \vec{\theta_z^{'}} \}
+$$
+
+其中 $I(z, u_i)$ 决定节点 $z$ 是否为 $u_i$ 的上下文节点，**上下文向量** 的更新公式如下
+
+$$
+\vec{\theta_z} = \vec{\theta_z} + \lambda\{\alpha[I(z, u_i) - \sigma(\vec{u_i}^T\vec{\theta_z})] \cdot \vec{u_i} \}, \\
+\vec{\theta_z^{'}} = \vec{\theta_z^{'}} + \lambda\{\beta[I(z, v_j) - \sigma(\vec{v_j}^T\vec{\theta_z^{'}})] \cdot \vec{v_j} \}, \\
+$$
+
 
 ## 参考链接
 
