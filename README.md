@@ -21,6 +21,7 @@
 - [Graph Transformer Networks (GTN)](#Graph-Transformer-Networks-GTN)
 - [Metapath2Vec](#Metapath2Vec)
 - [General Attributed Multiplex HeTerogeneous Network Embedding (GATNE)](#General-Attributed-Multiplex-HeTerogeneous-Network-Embedding-GATNE)
+- [Bipartite Network Embedding (BiNE)](#Bipartite-Network-Embedding-BiNE)
 - [参考链接](#参考链接)
 
 ## 图的基础知识
@@ -771,6 +772,57 @@ $$
 \vec{\theta_z} = \vec{\theta_z} + \lambda\{\alpha[I(z, u_i) - \sigma(\vec{u_i}^T\vec{\theta_z})] \cdot \vec{u_i} \}, \\
 \vec{\theta_z^{'}} = \vec{\theta_z^{'}} + \lambda\{\beta[I(z, v_j) - \sigma(\vec{v_j}^T\vec{\theta_z^{'}})] \cdot \vec{v_j} \}, \\
 $$
+
+## [Signed Graph Convolutional Network](https://arxiv.org/pdf/1808.06354.pdf?ref=https://githubhelp.com)
+
+将 GCN 框架运用到有权图中存在两个问题，第一是如何正确处理负权边，因为它们的属性和正权边完全不同，第二是如何将正权和负权边相互结合形成节点的表示。
+
+所以根据 **平衡理论**，定义了 **平衡路径**，以此为基础提出 **SGCN**。直观来说，平衡理论就是朋友的朋友是朋友，朋友的敌人是敌人，敌人的朋友是敌人，敌人的敌人是朋友。据此，我们将带权图周期分类为 **平衡** 或 **不平衡**。平衡的周期包括 **偶数条** 负链接，不平衡的周期包括 **奇数条** 负连接。
+
+![SGCN-four-cycles](./README/SGCN-four-cycles.png)
+
+并且我们按照路径的长度做出划分，$B_i(1)$ 就代表节点 $i$ 的直接连接的平衡节点（即权值为正），而 $B_i(2)$ 则代表节点 $i$ 的直接连接的非平衡节点（即权值为负）。以此类推，$B_i(2)$ 就代表节点 $i$ 的朋友的朋友和敌人的敌人。
+
+![SGCN-example](./README/SGCN-example.png)
+
+因此，我们推导出通过 $l$ 条路径的朋友或敌人的公式是
+
+$$
+B_i(l) = 
+\begin{cases}
+\{u_j | u_j \in N_i^+\} & l = 1 \\
+\{u_j | u_k \in B_i(l - 1) \text{ and } u_j \in N_k^+\} \cup \{u_j | u_k \in U_i(l - 1) \text{ and } u_j \in N_k^-\}  & l > 1 \\
+\end{cases}
+$$
+
+$$
+U_i(l) = 
+\begin{cases}
+\{u_j | u_j \in N_i^-\} & l = 1 \\
+\{u_j | u_k \in U_i(l - 1) \text{ and } u_j \in N_k^+ \} \cup \{u_j | u_k \in B_i(l - 1) \text{ and } u_j \in N_k^-\} & l > 1 \\
+\end{cases}
+$$
+
+![SGCN-CNN](./README/SGCN-CNN.png)
+
+在 SGCN 中，信息的传递和聚合，每层将维持两个表达：一个对应节点的平衡邻居集合，另一个对应不平衡邻居集合。所以每一层的聚合函数也分为两个部分，针对任意的节点 $u_i$，第一层卷积聚合（即 $l = 1$）如下：
+
+$$
+h_i^{B(1)} = \sigma(W^{B(1)}[\sum_{j \in N_i^+} \frac{h_j^{(0)}}{|N_i^+|}, h_i^{(0)}]) \\
+h_i^{U(1)} = \sigma(W^{U(1)}[\sum_{k \in N_i^-} \frac{h_k^{(0)}}{|N_i^-}, h_i^{(0)}]) \\
+$$
+
+当模型网络深度增加时，聚合函数会更加复杂，当 $l > 1$ 时的聚合函数是：
+
+$$
+h_i^{B(l)} = \sigma(W^{B(l)}[\sum_{j \in N_i^+} \frac{h_j^{(B(l - 1))}}{|N_i^+|}, \sum_{k \in N_i^- }\frac{h_k^{U(l - 1)}}{|N_i^-|}, h_i^{B(l - 1)}]) \\
+h_i^{U(l)} = \sigma(W^{U(l)}[\sum_{j \in N_i^+} \frac{h_j^{U(l - 1)}}{|N_i^+|}, \sum_{k \in N_i^-} \frac{h_k^{(B(l - 1))}}{|N_i^-|}, h_i^{U(l - 1)}]) \\
+$$
+
+
+基于此，SGCN 在训练过程中，希望分类节点之间的连接关系，并且运用平衡理论让有正边连接的节点要比没有边连接的节点要比有负边连接的节点的距离更进。目标函数设计为：
+
+![SGCN-Target-Function](./README/SGCN-Target-Function.png)
 
 
 ## 参考链接
