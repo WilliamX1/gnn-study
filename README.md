@@ -22,6 +22,8 @@
 - [Metapath2Vec](#Metapath2Vec)
 - [General Attributed Multiplex HeTerogeneous Network Embedding (GATNE)](#General-Attributed-Multiplex-HeTerogeneous-Network-Embedding-GATNE)
 - [Bipartite Network Embedding (BiNE)](#Bipartite-Network-Embedding-BiNE)
+- [Signed Graph Convolutional Network](#Signed-Graph-Convolutional-Network)
+- [Signed Graph Attention Networks](#Signed-Graph-Attention-Networks)
 - [参考链接](#参考链接)
 
 ## 图的基础知识
@@ -824,6 +826,39 @@ $$
 
 ![SGCN-Target-Function](./README/SGCN-Target-Function.png)
 
+## [Signed Graph Attention Networks](https://arxiv.org/pdf/1906.10958.pdf)
+
+平衡理论：朋友的朋友是朋友，敌人的敌人是朋友，常用与无向图。
+
+![SiGAT-Balance-Theory](./README/SiGAT-Balance-Theory.png)
+
+地位理论：从 $A$ 指向 $B$ 的正边，代表 $B$ 的地位比 $A$ 高，从 $A$ 指向 $B$ 的负边，代表 $B$ 的地位比 $A$ 低。
+
+![SiGAT-Statues-Theory](./README/SiGAT-Statues-Theory.png)
+
+所有满足平衡理论和地位理论的可能的三角形。
+
+![SiGAT-Possible](./README/SiGAT-Possible.png)
+
+对每一个 **主题**，都采用 `GAT` 方式聚合邻居节点。
+
+$$
+\alpha_{ij} = \frac{\exp(\text{LeakyReLU}(a^T[Wh_i \| Wh_j]))}{\sum_{k \in N_i}\exp(\text{LeakyReLU}(a^T[Wh_i \| Wh_k]))}
+$$
+
+然后，通过一个线性组合将特征聚合成单个节点最终的特征表示。
+
+$$
+h^{'}_i = \sigma(\sum_{j \in N_i}\alpha_{ij}Wh_j)
+$$
+
+![SiGAT-CNN](./README/SiGAT-CNN.png)
+
+使用无监督损失函数，此函数反映了朋友的嵌入是相似的，而敌人的嵌入式不相似的。
+
+$$
+J_g(Z_u) = - \sum_{v^+ \in N(u)^+} \log(\sigma(Z_u^TZ_{v^+})) - Q\sum_{v^-\in N(u)^-}\log(\sigma(-Z_u^TZ_v^-)).
+$$
 
 ## 参考链接
 
