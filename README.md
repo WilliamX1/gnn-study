@@ -860,6 +860,107 @@ $$
 J_g(Z_u) = - \sum_{v^+ \in N(u)^+} \log(\sigma(Z_u^TZ_{v^+})) - Q\sum_{v^-\in N(u)^-}\log(\sigma(-Z_u^TZ_v^-)).
 $$
 
+## [SDGNN: Learning Node Representation for Signed Directed Networks](https://www.aaai.org/AAAI21Papers/AAAI-7051.HuangJ.pdf)
+
+> 基于平衡理论和地位理论的 `layer-to-layer` 的有向关系 GNN 模型。它在不同的有向关系定义下的节点之间聚合和传播信息。
+
+![SDGNN-framework](./README/SDGNN-framework.png)
+
+对于一个有向信号图，方向和符号信息反映了两个节点之间不同关系和语义的信息，因此应该区分不同邻居之间的不同关系。基于此作者定义了 4 种节点间关系：
+
+$$
+u \rightarrow^+ v, u \rightarrow^- v, u \leftarrow^+ v, u \leftarrow^- v
+$$
+
+### SDGNN Layer
+
+基于不同的有向符号关系（Signed directed relation）$r_i$ 我们可以得到对应的邻居 $N_{r_i}$。我们使用不同的 SGD GNN 信息聚合器来聚合来自不同邻居的信息，并使用 MLP 对这些信息进行编码 `append` 到节点嵌入表示中。
+
+GNN 的聚合器包括 mean aggregators（均值聚合器），attention aggregators（注意力聚合器）等。对于均值聚合器，节点信息传播框架是
+
+$$
+\begin{aligned}
+X^l_{r_i}(u) &= \sigma(W^l_{r_i} \cdot \text{MEAN}(\{z^l_u\} \cup \{z^l_v, \forall v \in N_{r_i}(u)\})) \\
+z^{l + 1}_u &= \text{MLP}(\text{CONCAT}(X^l(u), X^l_{r_1}(u), \dots, X^l_{r_i}(u))) \\
+\end{aligned}
+$$
+
+对于注意力聚合器，首先需要计算节点 $u$ 和 $v$ 之间的归一化注意力系数 $\alpha^{r_i}_{uv}$，我们采用 LeakyReLU 作为非线性激活函数，计算如下：
+
+$$
+\alpha^{r_i}_{uv} = \frac{\text{exp} ({\text{LeakyReLU}(\vec{a}^T_{r_i}[W^l_{r_i}z^l_u\|W^l_{r_i}z^l_u]))}}{\sum_{k \in N_{r_i}(u)}\text{exp}(\text{LeakyReLU}(\vec{a}^T_{r_i}[W^l_{r_i}z^l_u\|W^l_{r_i}z^l_k]))}
+$$
+
+在得到节点之间在关系 $r_i$ 下的注意力系数之后，可以基于此生成关系 $r_i$ 下的节点信息和最终的节点表示：
+
+$$
+\begin{aligned}
+X^l_{r_i}(u) &= \sum_{v\in N_{r_i}(u)}\alpha^{r_i}_{uv}W_{r_i}z^l_v \\
+z^{l + 1}_u &= \text{MLP}(\text{CONCAT}(X^l(u), X^l_{r_1}(u), \dots, X^l_{r_i}(u))) \\
+\end{aligned}
+$$
+
+### Loss Function
+
+损失函数由 **边的符号预测**、**边的方向预测** 和 **三角关系预测** 三部分组成。
+
+对于边的符号预测，我们使用 **交叉熵损失函数** 来评估两个节点间的符号预测：
+
+$$
+\begin{aligned}
+L_{sign}(u, v) &= -y_{u, v}\log(\sigma(z^T_uz_v)) - (1 - y_{u, v})\log(1 - \sigma(z^T_uz_v)) \\
+L_{sign} &= \sum_{e_{u, v}\in E}L_{sign}(u, v) \\
+\end{aligned}
+$$
+
+在社会学理论中，status theory 体现在有向图边的方向中，因此对于一节点对 $u$ 和 $v$ 定义一个 status ranking 函数表示为 $s(z_u)$ 和 $s(z_v)$。基于此，使用如下平方损失函数来测量边 $e_{uv}$ 的预测状态关系值 $s(z_u) - s(z_v)$ 与真实值 $q_{uv}$ 之间的差异。
+
+$$
+\begin{aligned}
+L_{direction}(u \rightarrow v) &= (q_{uv} - (s(z_u) - s(z_v)))^2 \\
+q_{uv} &= 
+\begin{cases}
+\max(s(z_u) - s(z_v), \gamma) & u \rightarrow v: - \\
+\min(s(z_u) - s(z_v), \gamma) & u \rightarrow v: + \\
+\end{cases} \\
+L_{direction} &= \sum_{e{u, v} \in E}L_{direction}(u \rightarrow v) \\
+\end{aligned}
+$$
+
+其中 $s(z) = \text{sigmoid}(W \cdot z + b)$ 代表一个对向量 $z$ 的评分函数，$\gamma = 0.5$ 代表判断方向的阈值。
+
+对于三元关系 $\Delta_{i, j, k}, i \leftarrow^+ j, i \leftarrow^+ k, k \leftarrow^+ j$，最大化以下的可能性为：
+
+$$
+J_{\Delta_{i, j, k}} = P(+|e_{ij}) \times P(+|e_{ik}) \times P(+|e_{kj}) \\
+$$
+
+基于此定义三元关系目标函数为：
+
+$$
+\begin{aligned}
+J_{tri} &= \prod_{\Delta\in T}J_\Delta \\
+L_{triangle} = -\log J_{tri} &= \sum_{\Delta\in T} - \log J_\Delta = \sum_{\Delta\in T} L_\Delta \\
+\end{aligned}
+$$
+
+其中 $T$ 是根据 balance theory 和 status theory 划分的三元关系集合，可以用三个顶点构造一个三角形 $(i, j, k)$。
+
+$$
+\begin{aligned}
+L_{\Delta_{i, j, k}} &= L_{ij} + L_{ik} + L_{kj} \\
+L_{ij} &= -y_{i, j}\log P(+|e_{ij}) - (1 - y_{i, j}\log(1 - P(+|e_{ij}))) \\
+&= -y_{i, j}\log(\sigma(z^T_i z_j)) - (1 - y_{i, j}\log(1 - \sigma(z^T_i z_j))) \\
+\end{aligned}
+$$
+
+根据符号、方向和三角形损失函数，总体目标函数如下，其中 $\lambda_1, \lambda_2$ 代表损失函数组成部分的权重，该损失函数被设计用来重建有向符号网络的各种特性。
+
+$$
+L_{loss} = L_{sign} + \lambda_1L_{direction} + \lambda_2L_{triangle}
+$$
+
+
 ## 参考链接
 
 [零基础多图详解图神经网络（GNN/GCN）](https://www.youtube.com/watch?v=sejA2PtCITw)
