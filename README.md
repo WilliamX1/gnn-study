@@ -24,6 +24,8 @@
 - [Bipartite Network Embedding (BiNE)](#Bipartite-Network-Embedding-BiNE)
 - [Signed Graph Convolutional Network](#Signed-Graph-Convolutional-Network)
 - [Signed Graph Attention Networks](#Signed-Graph-Attention-Networks)
+- [SDGNN: Learning Node Representation for Signed Directed Networks](#SDGNN-Learning Node-Representation-for-Signed-Directed-Networks)
+- [Dynamic Graph](#Dynamic-Graph)
 - [参考链接](#参考链接)
 
 ## 图的基础知识
@@ -960,6 +962,17 @@ $$
 L_{loss} = L_{sign} + \lambda_1L_{direction} + \lambda_2L_{triangle}
 $$
 
+## Dynamic Graph
+
+**分类**
+
+- **Static**。忽略图中动态信息，将其作为一张静态图来处理。
+- **Edge Weighted**。动态信息作为静态图中的节点或者边的标签使用。
+- **Discrete**。使用一组有序的图（快照）来离散表示。
+- **Continuous Networks**。使用确切时间信息的表示形式。
+	- **The Event-based Representation**。基于链接持续时间的动态网络的表示。$EB = \{(u_i, v_i, t_i, \delta_i); i = 1, 2, \dots\}$。其中 $u_i, v_i$ 表示发生事件的一对节点，$t_i$ 表示发生时间，$\delta_i$ 表示持续时间。
+	- **The Contact Sequence Representation**。在接触序列中，链接是瞬时发生的，不存在持续时间，比如电子邮件的发送。
+	- **The Graph Stream Representation**。基于事件的表示，它将链接的出现和链接的消失视为单独的事件。
 
 ## 参考链接
 
