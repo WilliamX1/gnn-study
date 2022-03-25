@@ -974,6 +974,32 @@ $$
 	- **The Contact Sequence Representation**。在接触序列中，链接是瞬时发生的，不存在持续时间，比如电子邮件的发送。
 	- **The Graph Stream Representation**。基于事件的表示，它将链接的出现和链接的消失视为单独的事件。
 
+## [DySAT: Deep Neural Representation Learning on Dynamic Graphs via Self-Attention Networks](https://dl.acm.org/doi/pdf/10.1145/3336191.3371845)
+
+主要通过结构自注意力、时间自注意力和图环境预测来将动态图中信息提取。
+
+![DySAT-architecture](./README/DySAT-architecture.png)
+
+- 在结构自注意力层，输入为一个 **静态快照** 对应的邻接矩阵，以及节点的 one-hot 向量。通过注意力机制的加权，将节点的直接邻居嵌入进行聚合。
+
+![DySAT-formula-1](./README/DySAT-formula-1.png)
+
+- 在时间自注意力层，输入为从上层学得的节点嵌入，并与关于时间的位置编码结合，最终形成输入的节点嵌入。即：
+
+$$
+\{h_v^1 + p^1, h_v^2 + p^2, \dots, h_v^T + p^T \}
+$$
+
+其中 $h$ 为上层生成的 $z$，$p$ 是关于时间的位置编码，该层将多个静态快照进行时间上的聚合。
+
+![DySAT-formula-2](./README/DySAT-formula-2.png)
+
+在进行时间层面的嵌入聚合时，应当注意使用 $M$ 来控制时间范围，即只有比当前时间早的嵌入能够被聚合（将 M 设置为 0），比当前时间晚的不能（将 M 设置成负无穷）。
+
+![DySAT-formula-3](./README/DySAT-formula-3.png)
+
+在每个时间点，采用 **随机游走** 的方式，获得节点的上下文节点来构建正样本，负样本采用负采样的方式得到。
+
 ## 参考链接
 
 [零基础多图详解图神经网络（GNN/GCN）](https://www.youtube.com/watch?v=sejA2PtCITw)
